@@ -48,6 +48,7 @@ jobs:
         path: plan.tfplan
   test-apply:
     name: 'Test Apply'
+    needs: test-plan
     runs-on: ubuntu-latest
     environment: test
     defaults:
@@ -75,6 +76,7 @@ jobs:
       run: terraform apply -auto-approve -input=false plan.tfplan
   prod-plan:
     name: 'Prod Plan'
+    needs: test-apply
     runs-on: ubuntu-latest
     environment: production
 
@@ -111,6 +113,7 @@ jobs:
         path: plan.tfplan
   prod-apply:
     name: 'Prod Apply'
+    needs: prod-plan
     runs-on: ubuntu-latest
     environment: production
     defaults:
