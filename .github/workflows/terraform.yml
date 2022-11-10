@@ -1,0 +1,142 @@
+name: 'Terraform'
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test-plan:
+    name: 'Test Plan'
+    runs-on: ubuntu-latest
+    environment: test
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v0.4.0'
+      with:
+        workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+        service_account: ${{ secrets.SERVICE_ACCOUNT }}
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: terraform init
+
+    # Checks that all Terraform configuration files adhere to a canonical format
+    - name: Terraform Format
+      run: terraform fmt -check
+
+    # Generates an execution plan for Terraform
+    - name: Terraform Plan
+      run: terraform plan -input=false -out=plan.tfplan
+      
+    - uses: actions/upload-artifact@v2
+      with:
+        name: test-plan
+        path: plan.tfplan
+  test-apply:
+    name: 'Test Apply'
+    needs: test-plan
+    runs-on: ubuntu-latest
+    environment: test
+    defaults:
+      run:
+        shell: bash
+    steps:
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v0.4.0'
+      with:
+        workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+        service_account: ${{ secrets.SERVICE_ACCOUNT }}
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Terraform Init
+      run: terraform init
+
+    - uses: actions/download-artifact@v2
+      with:
+        name: test-plan
+
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/"main"' && github.event_name == 'push'
+      run: terraform apply -auto-approve -input=false plan.tfplan
+  prod-plan:
+    name: 'Prod Plan'
+    needs: test-apply
+    runs-on: ubuntu-latest
+    environment: production
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v0.4.0'
+      with:
+        workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+        service_account: ${{ secrets.SERVICE_ACCOUNT }}
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: terraform init
+
+    # Checks that all Terraform configuration files adhere to a canonical format
+    - name: Terraform Format
+      run: terraform fmt -check
+
+    # Generates an execution plan for Terraform
+    - name: Terraform Plan
+      run: terraform plan -input=false -out=plan.tfplan
+      
+    - uses: actions/upload-artifact@v2
+      with:
+        name: prod-plan
+        path: plan.tfplan
+  prod-apply:
+    name: 'Prod Apply'
+    needs: prod-plan
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        shell: bash
+    steps:
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v0.4.0'
+      with:
+        workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+        service_account: ${{ secrets.SERVICE_ACCOUNT }}
+        
+    - name: Checkout
+      uses: actions/checkout@v3
+      
+    - uses: actions/download-artifact@v2
+      with:
+        name: prod-plan
+        
+    - name: Terraform Init
+      run: terraform init
+      
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/"main"' && github.event_name == 'push'
+      run: terraform apply -auto-approve -input=false plan.tfplan
